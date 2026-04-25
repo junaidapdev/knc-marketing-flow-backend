@@ -94,3 +94,18 @@ The only tracked markdown files are `README.md`, `CLAUDE.md`, and
   outside that scope wait for their chunk.
 - **Log chunk completion in `PROJECT_LOG.md`** with a short summary of what
   landed.
+
+## Runbook (production)
+
+Deployed on **Render** (Web Service, Node 20). Supabase project
+`igfbsqgcujpxlmydfywl`. Daily `social-sync-cron` Edge Function runs at
+03:00 UTC via `pg_cron`.
+
+| Symptom | First check | Then |
+|---|---|---|
+| API returns 5xx broadly | `curl <api>/health/deep` — is `db.ok` true? | If 503, check Supabase status; if 200 but errors persist, check Render logs |
+| Login works but every request 401s | `WEB_ORIGIN` on Render covers the deployed web origin? | Update + redeploy |
+| Cron isn't running | `select * from cron.job_run_details where jobname='social-sync-daily' order by start_time desc limit 5;` | If `failed`: check `social_sync_log` for the platform-level error |
+| Rate-limited responses (429) on legit traffic | Check `RATE_MAX_REQUESTS` in `src/middleware/security.ts` | Bump only if you see real, sustained legit usage above the limit |
+
+**Rollback:** Render dashboard → Deploys → previous green deploy → Rollback.

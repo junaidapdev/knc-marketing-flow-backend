@@ -2,6 +2,80 @@
 
 Append a short entry for every chunk that lands. Newest entries at the top.
 
+## 2026-04-25 — Chunk 14 lite — Production hardening (API)
+
+Chunk 14 was originally specified with Sentry, structured request
+logging with redaction, multi-stage Docker, and deploy-on-merge CI.
+For an internal app with 2–5 users that's overkill — descoped to the
+high-leverage items only:
+
+- **Helmet** for response security headers (HSTS, nosniff, etc.). CSP
+  disabled — this server only ever serves JSON, no HTML to defend.
+- **CORS allowlist** driven by `WEB_ORIGIN` env (comma-separated).
+  Empty/unset = reflect any origin (dev). Production sets it to the
+  deployed Vercel origin.
+- **Global rate limit** at 300 req / 15 min per IP via
+  `express-rate-limit`, with `/health` and `/health/deep` skipped so a
+  misbehaving probe can't lock itself out. `app.set('trust proxy', 1)`
+  so the limiter sees the real client IP via `X-Forwarded-For`.
+  Per-route auth-endpoint rate limits don't apply here: auth is handled
+  entirely by Supabase Auth client-side, so brute-force protection
+  lives there, not in this API.
+- **`GET /health/deep`** — pings the `brand` table (count-only) and
+  reports `{ db: { ok, latencyMs } }`, returning 503 with
+  `DB_CONNECTION_FAILED` on failure. Render health-check path should
+  point at this.
+- **`WEB_ORIGIN`** added to `env.ts` schema and `.env.example`.
+- **`.github/workflows/ci.yml`** runs typecheck + lint + test on PR
+  and on push to main. Render handles deploy itself.
+- **README** gained an env-var row for every var (was missing the
+  Apify / SERVICE_TOKEN / WEB_ORIGIN ones), a deeper health-check
+  section, and a Deployment (Render) section explaining why we picked
+  Render over Vercel Serverless (long-running Apify polls + sustained
+  DB connections don't fit the serverless cold-start model).
+- **CLAUDE.md** gained a Runbook table: symptom → first check → fix.
+
+Tests added for both health-check paths (success + DB-down 503). All
+gates green: 146/146 across 22 files.
+
+Sentry, pino-http request logging with header redaction, and a
+Dockerfile are explicitly **not** done — flagged for "the day we
+actually need them" rather than carried as dead infrastructure.
+
+## 2026-04-25 — Chunk 13 backend mini-chunk — Social read endpoints
+
+Frontend Chunk 13 needed read-side endpoints for the dashboard. Added
+four GET routes alongside the existing POST `/social/sync` and
+`/social/refresh`, all guarded by `requireAuthOrService`:
+
+- `GET /social/snapshots?platform&days` — returns snapshots ordered
+  ascending by `captured_at`. `days` defaults to 30, range 1–365.
+- `GET /social/kpis` — for each platform: latest follower count + 7d
+  and 30d deltas. Anchor for each window is the **oldest** snapshot
+  whose timestamp falls inside the window (i.e. how much the count
+  grew over that window), not the latest snapshot before the cutoff.
+  Delta is `null` when the anchor is the latest row (trivially zero).
+- `GET /social/posts?platform&sortBy&limit` — top posts ordered DESC by
+  the chosen field with `nullsFirst: false`. `sortBy` enum:
+  `plays | likes | comments | shares | saves | posted_at`.
+- `GET /social/sync-status` — returns the latest log overall plus a
+  per-platform breakdown so the UI can banner failures even when the
+  most recent run succeeded on a different platform.
+
+`socialReadService.ts` extracts the magic numbers (`MS_PER_DAY`,
+`KPI_SHORT_WINDOW_DAYS = 7`, `KPI_LONG_WINDOW_DAYS = 30`,
+`SYNC_LOG_LOOKBACK = 50`) and coerces `bigint` columns
+(`total_likes`, `plays`, `likes`, `comments`, `shares`, `saves`)
+through `Number(...)` before they leave the service boundary.
+
+`tests/socialRead.test.ts` covers KPI deltas (1100→1200 = +100 over 7d,
+1000→1200 = +200 over 30d), snapshot/post mapping (including the
+bigint coercion), the 422 path on an invalid `sortBy`, and the
+sync-status per-platform breakdown.
+
+All gates green: `npm run typecheck`, `npm run lint`, `npm test` →
+144/144.
+
 ## 2026-04-24 — Chunk 12 complete — Scheduled social sync
 
 Wires up daily cron + admin refresh endpoint without duplicating

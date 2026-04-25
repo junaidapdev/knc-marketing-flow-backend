@@ -2,6 +2,7 @@ import express, { type Express } from 'express';
 import { requireAuth } from './middleware/auth';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { requestId } from './middleware/requestId';
+import { apiRateLimit, buildCors, buildHelmet } from './middleware/security';
 import assigneesRouter from './routes/assignees';
 import branchesRouter from './routes/branches';
 import brandsRouter from './routes/brands';
@@ -23,8 +24,15 @@ export function buildApp(): Express {
   const app = express();
 
   app.disable('x-powered-by');
+  // `trust proxy` so express-rate-limit and req.ip see the client IP
+  // forwarded by Render/Vercel/etc. instead of the proxy's loopback.
+  app.set('trust proxy', 1);
+
+  app.use(buildHelmet());
+  app.use(buildCors());
   app.use(express.json());
   app.use(requestId);
+  app.use(apiRateLimit);
 
   // Public routes
   app.use(healthRouter);

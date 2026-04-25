@@ -23,6 +23,14 @@ const envSchema = z.object({
    * service-token auth entirely.
    */
   SERVICE_TOKEN: z.string().default(''),
+  /**
+   * Comma-separated list of origins allowed to call this API in the
+   * browser. Empty (default) means "allow all" — fine for local dev,
+   * not safe for prod. Set to e.g.
+   * `https://marketing.kayansweets.com,https://staging.kayansweets.com`
+   * before deploying.
+   */
+  WEB_ORIGIN: z.string().default(''),
 });
 
 const parsed = envSchema.safeParse(process.env);

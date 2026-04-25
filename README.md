@@ -35,6 +35,12 @@ the codebase reads `process.env`.
 | `SUPABASE_URL`              | yes (prod) | `http://localhost:54321` | Supabase project URL                                       |
 | `SUPABASE_SERVICE_ROLE`     | yes (prod) | placeholder              | Supabase service-role key (server-only; bypasses RLS)      |
 | `SUPABASE_PROJECT_REF`      | yes (prod) | placeholder              | Supabase project ref — used by `db:types`                  |
+| `APIFY_TOKEN`               | yes (prod) | placeholder              | Apify API token for the social sync                        |
+| `APIFY_TIKTOK_ACTOR_ID`     | no       | `clockworks~tiktok-scraper` | TikTok scraper actor                                     |
+| `APIFY_IG_ACTOR_ID`         | no       | `apify~instagram-profile-scraper` | Instagram scraper actor                            |
+| `APIFY_SNAP_ACTOR_ID`       | no       | placeholder              | Snapchat scraper actor (skipped at runtime if absent)      |
+| `SERVICE_TOKEN`             | yes (prod) | empty                    | Shared secret for the cron Edge Function → API call        |
+| `WEB_ORIGIN`                | yes (prod) | empty                    | Comma-separated CORS allowlist; empty = reflect any origin (dev only) |
 
 **Never use the Supabase anon key on the backend.** The service role is
 required so the API can enforce its own authorization.
@@ -188,10 +194,42 @@ Errors:
 Use `success(data, meta?)` and `error(code, message, details?, meta?)` from
 `src/utils/response.ts`. Do not hand-roll envelopes.
 
-## Health check
+## Health checks
 
 ```bash
+# Process is alive
 curl http://localhost:3000/health
+
+# Process is alive AND can reach the database
+curl http://localhost:3000/health/deep
 ```
 
-Returns `{ success, data: { status, version, uptime }, meta }` with HTTP 200.
+`/health` returns `{ status, version, uptime }`; `/health/deep` adds
+`db: { ok, latencyMs }` and returns 503 if the DB ping fails. Point your
+uptime probe at `/health/deep`.
+
+## Deployment (Render)
+
+The API is deployed on **Render** (Web Service, Node 20). Render is set
+to auto-deploy from `main`.
+
+**One-time setup:**
+
+1. Create a Web Service from this repo. Build: `npm ci && npm run build`.
+   Start: `npm start`. Health check path: `/health/deep`.
+2. Set env vars in the Render dashboard (mirror `.env.example`):
+   `NODE_ENV=production`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE`,
+   `SUPABASE_PROJECT_REF`, `APIFY_TOKEN`, `SERVICE_TOKEN`, and
+   `WEB_ORIGIN` set to the deployed web origin (e.g.
+   `https://marketing.kayansweets.com`).
+3. The Supabase Edge Function `social-sync-cron` needs the same
+   `SERVICE_TOKEN` and the deployed API base URL — see "Social sync
+   cron" above.
+
+**Rollback:** in the Render dashboard, find the previous successful
+deploy and click "Rollback". No script needed.
+
+**Why Render and not Vercel Serverless?** This API is stateful enough
+(long-running Apify polls, sustained DB connections) that the
+serverless cold-start + 10s timeout model would be a constant headache.
+A small always-on Web Service is the right shape.
