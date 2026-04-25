@@ -1,0 +1,46 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Editor / IDE
+.cursor/
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Ad-hoc docs (keep only README.md, CLAUDE.md, PROJECT_LOG.md)
+CrossFix.md
+DeploymentFix.md
+NOTES.md
+TODO.md
+SCRATCH.md
+notes.md
+todo.md
+scratch.md
+
+# Runtime
+pids/
+*.pid
+*.seed
